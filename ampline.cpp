@@ -1,3 +1,30 @@
+#include "ampline.h"
+
+AmperkaLine (
+           int pin,
+           word baseDelay = 100,
+           byte msgLen = 8,
+           byte crcLen = 2,
+           word polynom = 0,
+           word timeout = 100
+          )
+          : m_pin(pin),
+            m_baseDelay(baseDelay),
+            m_msgLen(msgLen),
+            m_crcLen(crcLen),
+            m_polynom(polynom),
+            m_timeout(timeout)
+{
+}
+
+bool send(const void *msg)
+{
+}
+
+bool receive(void *msg)
+{
+}
+
 const int rfpin = 5;
 
 

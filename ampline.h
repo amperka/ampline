@@ -4,10 +4,17 @@
 class AmperkaLine
 {
 public:
-  AmperkaLine(bool direction, int pin, word baseDelay = 100, byte msgLen = 8, byte crcLen = 2, word polynom = 0);
+  AmperkaLine (
+               int pin,
+               word baseDelay = 100,
+               byte msgLen = 8,
+               byte crcLen = 2,
+               word polynom = 0,
+               word timeout = 100
+              );
 
   bool send(const void *msg);
-  bool receive(void *msg, word timeout);
+  bool receive(void *msg);
 
 protected:
   int m_pin;
