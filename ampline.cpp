@@ -1,12 +1,14 @@
-#include "ampline.h"
+#include <Arduino.h>
+#include <ampline.h>
 
-AmperkaLine (
+
+AmperkaLine::AmperkaLine (
            int pin,
-           word baseDelay = 100,
-           byte msgLen = 8,
-           byte crcLen = 2,
-           word polynom = 0,
-           word timeout = 100
+           unsigned long baseDelay,
+           byte msgLen,
+           byte crcLen,
+           word polynom,
+           word timeout
           )
           : m_pin(pin),
             m_baseDelay(baseDelay),
@@ -17,97 +19,135 @@ AmperkaLine (
 {
 }
 
-bool send(const void *msg)
+void AmperkaLine::line_raise(void) {
+  digitalWrite(m_pin, HIGH);
+}
+
+void AmperkaLine::line_fall(void) {
+  digitalWrite(m_pin, LOW);
+}
+
+bool AmperkaLine::line_pin(void) {
+  return digitalRead(m_pin);
+}
+
+void AmperkaLine::send(unsigned long msg)
 {
+    byte crc;
+
+    pinMode(m_pin, OUTPUT);
+
+    line_raise();
+    delayMicroseconds(70*m_baseDelay);
+    line_fall();
+    delayMicroseconds(10*m_baseDelay);
+    line_raise();
+   
+    crc = 0x00;
+   
+    for(int i = 0; i < 32; i++)
+    {
+        if(bitRead(msg, i))
+        {
+            delayMicroseconds(m_baseDelay);
+        }
+        else
+        {
+            delayMicroseconds(3*m_baseDelay);
+        }
+        line_fall();
+        delayMicroseconds(m_baseDelay*1.5);
+        line_raise();
+    }
+   
+    crc ^= msg&0xFF;
+    crc ^= ((msg&0xFF00)>>8);
+    crc ^= ((msg&0xFF0000)>>16);
+    crc ^= ((msg&0xFF000000)>>24);
+   
+    for(int i = 0; i < 8; i++)
+    {
+        if(bitRead(crc, i))
+        {
+            delayMicroseconds(m_baseDelay);
+        }
+        else
+        {
+            delayMicroseconds(3*m_baseDelay);
+        }
+
+        line_fall();
+        delayMicroseconds(m_baseDelay*1.5);
+        line_raise();
+    }
+   
+    line_fall();
 }
 
-bool receive(void *msg)
+int AmperkaLine::receive(unsigned long *msg)
 {
-}
+    unsigned long tm;
+    byte crc, rcrc;
 
-const int rfpin = 5;
-
-
-void rf_raise() {
-  digitalWrite(rfpin, HIGH);
-}
-
-void rf_fall() {
-  digitalWrite(rfpin, LOW);
-}
-
-bool rf_pin() {
-  return digitalRead(rfpin);
-}
-
-void rf_putdw(unsigned long dw)
-{
-  byte crc, *dt = (byte*)dw;
-
-  rf_raise();
-  delay(20);
-  rf_fall();
-  delay(5);
-  rf_raise();
-
-  crc = 0x00;
-
-  for(int i =0; i < 32; i++) {
-    if(_BIT(dw, i)) {
-      delay(5);
-    } else {
-      delay(10);
+    pinMode(m_pin, INPUT);
+   
+    do
+    {
+        while(!line_pin());
+        tm = micros();
+        while(line_pin());
     }
-    rf_fall();
-    delay(3);
-    rf_raise();
-  }
-
-  for(int i = 0; i < 8; i++) {
-    if(_BIT(crc, i)) {
-      delay(5);
-    } else {
-      delay(10);
+    while(!((micros() - tm) > 45*m_baseDelay && (micros() - tm) < 72*m_baseDelay));
+   
+    crc = 0;
+   
+    while(!line_pin());
+    tm = micros();
+   
+    for(int i = 0; i < 32; i++)
+    {
+        while(line_pin());
+     
+        if(abs(micros() - tm) < 1.5*m_baseDelay)
+        {
+            bitSet((*msg), i);
+        }
+        else if(abs(micros() - tm) < 4*m_baseDelay)
+        {
+            bitClear((*msg), i);
+        }
+        else return 2;
+     
+        while(!line_pin());
+        tm = micros();
     }
-    rf_fall();
-    delay(3);
-    rf_raise();
-  }
-
-  rf_fall();
-}
-
-bool rf_getdw(unsigned long* dw) {
-  unsigned long tm;
-
-  while(!rf_pin());
-
-  tm = millis();
-
-  while(rf_pin());
-
-  if(!(millis() - tm > 15 && millis() - tm < 25)) {
-    return 1;
-  }
-
-  while(!rf_pin());
-  tm = millis();
-
-  for(int i = 0; i < 32; i++) {
-    while(rf_pin());
-
-    if(abs(millis() - tm) < 7) {
-      *dw |= _BIT(0xFFFFFFFF, i);
-    } else if(abs(millis() - tm) < 13) {
-      *dw &= ~_BIT(0xFFFFFFFF, i);
-    } else {
-      return 2;
+   
+    crc ^= (*msg)&0xFF;
+    crc ^= (((*msg)&0xFF00)>>8);
+    crc ^= (((*msg)&0xFF0000)>>16);
+    crc ^= (((*msg)&0xFF000000)>>24);
+    rcrc = 0;
+   
+    for(int i = 0; i < 8; i++)
+    {
+        while(line_pin());
+   
+        if(abs(micros() - tm) < 1.5*m_baseDelay)
+        {
+            rcrc |= bit(i);
+        }
+        else if(abs(micros() - tm) < 4*m_baseDelay)
+        {
+            rcrc &= ~bit(i);
+        }
+        else return 2;
+   
+        while(!line_pin());
+        tm = micros();
     }
-
-    while(!rf_pin());
-    tm = millis();
-  }
-
-  return 0;
+   
+    if(rcrc != crc) return 3;
+   
+    return 0;
 }
 
